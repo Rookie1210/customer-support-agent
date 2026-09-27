@@ -32,7 +32,20 @@ def chat():
     memory_query = f"Customer {customer_id}. Current support message: {message}"
 
     try:
-        recalled_memories = memory.recall_memories(memory_query)
+        recalled_memories = memory.recall_memories(
+            memory_query,
+            customer_id=customer_id,
+        )
+        relevant_memories = []
+        seen_memories = set()
+        for item in recalled_memories:
+            normalized = item.strip().casefold()
+            if normalized not in seen_memories:
+                relevant_memories.append(item)
+                seen_memories.add(normalized)
+            if len(relevant_memories) == 5:
+                break
+        recalled_memories = relevant_memories
         response = llm.generate_response(customer_id, message, recalled_memories)
 
         # Store substantive exchanges only. Keep the stored text grounded in the
@@ -42,7 +55,7 @@ def chat():
                 f"Customer {customer_id} reported: {message[:500]}. "
                 f"Support response: {response[:500]}"
             )
-            memory.store_memory(stored_interaction)
+            memory.store_memory(stored_interaction, customer_id=customer_id)
 
         return jsonify({"response": response, "memories": recalled_memories})
     except Exception:

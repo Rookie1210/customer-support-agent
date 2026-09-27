@@ -1,24 +1,24 @@
 import os
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from xai_sdk import Client
+from xai_sdk.chat import system, user
 
 
 load_dotenv()
 
 
 class LLMService:
-    """OpenAI-backed response generation, isolated from the Flask route."""
+    """xAI Grok response generation, isolated from the Flask route."""
 
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY must be set to use the LLM service.")
-
-        self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.api_key = os.getenv("XAI_API_KEY")
 
     def generate_response(self, customer_id, message, memories):
+        if not self.api_key:
+            raise RuntimeError("XAI_API_KEY must be set to use the LLM service.")
+
+        client = Client(api_key=self.api_key)
         memory_context = "\n".join(f"- {item}" for item in memories) or "No relevant memories were retrieved."
         system_prompt = (
             "You are a helpful, concise customer-support agent. Use retrieved customer memories "
@@ -34,15 +34,11 @@ class LLMService:
             f"Retrieved Hindsight memories (these are the only available prior context):\n{memory_context}"
         )
 
-        result = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.3,
-        )
-        content = result.choices[0].message.content
+        chat = client.chat.create(model="grok-4.7")
+        chat.append(system(system_prompt))
+        chat.append(user(user_content))
+        result = chat.sample()
+        content = result.content
         if not content:
             raise RuntimeError("The LLM returned an empty response.")
         return content.strip()
