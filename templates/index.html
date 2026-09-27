@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f4f6fa">
+<title>MemorySupport AI</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><script src="{{ url_for('static', filename='script.js') }}" defer></script>
+</head><body><div class="app">
+<header class="topbar"><a class="brand" href="/"><span class="logo">M</span><span>MemorySupport <b>AI</b></span></a><span class="connected"><i></i> Connected</span></header>
+<main class="page"><section class="intro"><div><p class="eyebrow">SUPPORT WORKSPACE</p><h1>Customer support that remembers what worked.</h1><p class="subtitle">Personalized help, grounded in each customer’s Hindsight history.</p></div><span class="privacy">⌑ &nbsp;Customer-scoped memory</span></section>
+<section class="workspace">
+<aside class="panel customers"><header class="side-heading"><div><p class="eyebrow">WORKSPACE</p><h2>Customers</h2></div><span class="count" id="customer-total">3</span></header>
+<button class="new-customer" id="new-customer-button" type="button">＋ &nbsp;New customer</button>
+<form class="new-form" id="new-customer-form" hidden><label for="new-customer-id">Customer name or ID</label><input id="new-customer-id" maxlength="128" autocomplete="off" placeholder="e.g. arjun"><div><button class="button quiet" id="cancel-new-customer" type="button">Cancel</button><button class="button primary" type="submit">Open customer</button></div></form>
+<nav id="customer-list" class="customer-list" aria-label="Customers"></nav><p class="sidebar-note">✓ &nbsp;History stays scoped to the selected customer.</p></aside>
+<section class="panel chat"><header class="chat-head"><div class="customer-heading"><span class="avatar" id="customer-avatar">R</span><div><div class="heading-line"><h2 id="conversation-heading">Rahul</h2><span id="customer-badge" class="badge">Checking history</span></div><p>Support conversation</p></div></div><button class="button quiet" id="clear-conversation" type="button">Clear chat</button></header>
+<div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions text"></div>
+<div class="error" id="chat-error" role="alert" hidden><span id="chat-error-message"></span><button id="retry-button" type="button" hidden>Retry</button></div>
+<section class="scenarios"><div><b>DEMO SCENARIOS</b><small>Click to fill the message</small></div><div id="scenario-list"></div></section>
+<form class="composer" id="message-form"><label class="sr-only" for="message-input">Message</label><textarea id="message-input" rows="2" maxlength="4000" placeholder="Type a support message…" required></textarea><div><span>Enter to send <i>·</i> Shift + Enter for a new line</span><button class="send" id="send-button" type="submit"><span id="send-label">Send</span> ↗</button></div></form></section>
+<aside class="panel memories"><header class="memory-head"><div><p class="eyebrow">CUSTOMER CONTEXT</p><h2>✦ &nbsp;Hindsight Memory</h2></div><span class="count memory-count" id="memory-count">0</span></header>
+<div class="memory-status" id="memory-status" data-kind="loading"><i></i><div><strong id="memory-status-title">Loading customer history</strong><p id="memory-status-copy">Searching Hindsight for this customer.</p></div></div>
+<button class="memory-retry" id="memory-retry" type="button" hidden>Retry history lookup</button><div class="memory-body" id="memory-body"></div>
+<footer class="memory-foot"><b>✓</b><span id="memory-footnote-copy">Only memories retrieved for this customer are shown.</span></footer></aside>
+</section><footer class="page-foot"><span>MemorySupport AI · Prototype</span><span>Hindsight memory · Groq support agent</span></footer></main></div></body></html>
