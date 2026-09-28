@@ -66,7 +66,7 @@ def _solution_from_text(text):
     value = text.casefold().replace("\u2010", "-").replace("\u2011", "-").replace("\u2013", "-").replace("\u2014", "-")
     if re.search(r"re[\s-]?auth|reauth|re[\s-]?link", value):
         return "Re-authentication or UPI re-linking"
-    if re.search(r"clear(?:ing)? (?:the )?cache", value):
+    if re.search(r"clear(?:ed|ing)? (?:the )?(?:app )?cache", value):
         return "Clear cache"
     if re.search(r"reinstall(?:ing)?", value):
         return "Reinstall the app"
@@ -91,7 +91,9 @@ def _outcome_from_customer_message(message):
     if re.search(
         r"\b(?:fixed|resolved|solved) (?:it|the issue|the problem)\b"
         r"|\b(?:it|that|the fix|the solution) worked\b"
-        r"|\bworking now\b|\bpayment went through\b",
+        r"|\bworking now\b|\bpayment went through\b"
+        r"|\bproblem solved\b|\b(?:it['’]?s|that['’]?s) fixed\b"
+        r"|\b(?:everything|it|that) is working\b",
         value,
     ):
         return "worked"
@@ -100,15 +102,22 @@ def _outcome_from_customer_message(message):
     return "unconfirmed"
 
 
-def _candidate_event(customer_id, message, response, recalled_memories):
+def _candidate_event(
+    customer_id,
+    message,
+    response,
+    recalled_memories,
+    explicit_outcome=None,
+    explicit_solution=None,
+):
     context_text = "\n".join([message, *recalled_memories])
     issue = _issue_from_text(message) or _issue_from_text(context_text)
     if not issue:
         return None
 
     platform = _platform_from_text(message) or _platform_from_text(context_text)
-    outcome = _outcome_from_customer_message(message)
-    solution = _solution_from_text(message)
+    outcome = explicit_outcome or _outcome_from_customer_message(message)
+    solution = explicit_solution or _solution_from_text(message)
 
     if not solution and outcome in {"failed", "worked", "attempted"}:
         remembered_solutions = {
@@ -239,6 +248,48 @@ def _customer_id(value):
     return value
 
 
+def _parse_explicit_outcome(value):
+    """Validate an optional structured customer report from a quick action."""
+    if value is None:
+        return None, None, None
+
+    if isinstance(value, dict):
+        status = value.get("status")
+        solution = value.get("solution")
+    else:
+        status = value
+        solution = None
+
+    if not isinstance(status, str):
+        return None, None, "Outcome status must be attempted, success, or failed."
+
+    normalized = status.strip().casefold()
+    outcomes = {
+        "attempted": "attempted",
+        "success": "worked",
+        "worked": "worked",
+        "failed": "failed",
+        "unconfirmed": "unconfirmed",
+    }
+    if normalized not in outcomes:
+        return None, None, "Outcome status must be attempted, success, or failed."
+
+    if solution is not None:
+        if not isinstance(solution, str) or len(solution) > 200:
+            return None, None, "Outcome solution must be 200 characters or fewer."
+        solution = solution.strip() or None
+    return outcomes[normalized], solution, None
+
+
+def _public_outcome(outcome):
+    return {
+        "worked": "SUCCESS",
+        "failed": "FAILED",
+        "attempted": "ATTEMPTED",
+        "unconfirmed": "UNCONFIRMED",
+    }.get(outcome)
+
+
 def _error(message, status):
     return jsonify({"error": message}), status
 
@@ -255,13 +306,21 @@ def request_too_large(exception):
 
 def _structured_memory(text):
     message = re.search(r"^\s*Customer message:\s*(.*?)\s*$", text, re.I | re.M)
+    timestamp = re.search(r"^\s*Timestamp:\s*(.*?)\s*$", text, re.I | re.M)
+    solution_status = re.search(
+        r"^\s*Solution status:\s*(.*?)\s*$", text, re.I | re.M
+    )
     return {
         "text": text,
         "issue": _issue_from_text(text),
         "platform": _platform_from_text(text),
         "solution": _solution_from_text(text),
         "outcome": _memory_outcome(text),
+        "solution_status": solution_status.group(1).strip().lower()
+        if solution_status
+        else None,
         "customer_message": message.group(1) if message else None,
+        "timestamp": timestamp.group(1).strip() if timestamp else None,
     }
 
 
@@ -318,14 +377,33 @@ def chat():
     if len(message) > 4_000:
         return _error("Messages must be 4,000 characters or fewer.", 400)
 
-    memory_query = f"Customer {customer_id}. Current support message: {message}"
+    explicit_outcome, explicit_solution, outcome_error = _parse_explicit_outcome(
+        payload.get("outcome")
+    )
+    if outcome_error:
+        return _error(outcome_error, 400)
+
+    memory_query = (
+        f"Customer {customer_id}. Current support message: {message}. "
+        "Find related previous support issues, platforms, attempted solutions, "
+        "and customer-confirmed successful or failed outcomes."
+    )
     try:
         recalled_memories = _clean_memories(
             memory.recall_memories(memory_query, customer_id=customer_id)
         )
         response = llm.generate_response(customer_id, message, recalled_memories)
 
-        event = _candidate_event(customer_id, message, response, recalled_memories)
+        event = _candidate_event(
+            customer_id,
+            message,
+            response,
+            recalled_memories,
+            explicit_outcome=explicit_outcome,
+            explicit_solution=explicit_solution,
+        )
+        memory_updated = False
+        memory_update_error = False
         if event:
             # Search Hindsight for matching active customer history before
             # retaining, then use the stable tag for exact idempotency going
@@ -340,13 +418,34 @@ def chat():
             )
             _mark_new_outcome_episode(event, customer_id, duplicate_context)
             if not _event_is_duplicate(event, customer_id, duplicate_context):
-                memory.store_memory(
-                    event["content"],
-                    customer_id=customer_id,
-                    fingerprint=event["fingerprint"],
-                )
+                try:
+                    memory.store_memory(
+                        event["content"],
+                        customer_id=customer_id,
+                        fingerprint=event["fingerprint"],
+                    )
+                    memory_updated = True
+                except Exception as error:
+                    app.logger.error(
+                        "Support memory retain failed (%s)", type(error).__name__
+                    )
+                    memory_update_error = True
 
-        return jsonify({"response": response, "memories": recalled_memories})
+        reported_outcome = (
+            event["outcome"]
+            if event
+            else explicit_outcome or _outcome_from_customer_message(message)
+        )
+        return jsonify(
+            {
+                "response": response,
+                "memories": recalled_memories,
+                "memory_updated": memory_updated,
+                "memory_update_error": memory_update_error,
+                "outcome": _public_outcome(reported_outcome),
+                "suggested_solution": _solution_from_text(response),
+            }
+        )
     except Exception as error:
         app.logger.error("Customer support request failed (%s)", type(error).__name__)
         return _error("The support service is temporarily unavailable. Please try again.", 503)

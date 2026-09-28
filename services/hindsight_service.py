@@ -44,7 +44,7 @@ class HindsightMemory:
         solution = None
         if re.search(r"re[\s-]?auth|reauth|re[\s-]?link", value):
             solution = "reauthentication"
-        elif re.search(r"clear(?:ing)? (?:the )?cache", value):
+        elif re.search(r"clear(?:ed|ing)? (?:the )?(?:app )?cache", value):
             solution = "clear-cache"
         elif re.search(r"reinstall", value):
             solution = "reinstall"
@@ -62,10 +62,25 @@ class HindsightMemory:
             r"\b(?:worked|fixed|solved|effective)\b",
             value,
         )
+        attempted = re.search(
+            r"outcome\s*:\s*attempted|solution status\s*:\s*attempted|"
+            r"\b(?:customer reported trying|tried the (?:suggested )?(?:fix|solution))\b",
+            value,
+        )
         advice = re.search(r"\b(?:advised|recommended|suggested)\b", value)
 
         if solution:
-            outcome = "failed" if failed else "worked" if worked else "unconfirmed" if advice else None
+            outcome = (
+                "failed"
+                if failed
+                else "worked"
+                if worked
+                else "attempted"
+                if attempted
+                else "unconfirmed"
+                if advice or re.search(r"outcome\s*:\s*unconfirmed", value)
+                else None
+            )
             if outcome:
                 return ("solution", solution, outcome)
 
@@ -186,10 +201,23 @@ class HindsightMemory:
                 if not isinstance(text, str):
                     continue
                 text = text.strip()
-                key = " ".join(text.casefold().split())
+                timestamp = None
+                for name in ("occurred_start", "var_date", "mentioned_at", "updated_at"):
+                    value = item.get(name) if isinstance(item, dict) else getattr(item, name, None)
+                    if value is not None:
+                        timestamp = value.isoformat() if hasattr(value, "isoformat") else str(value).strip()
+                        if timestamp:
+                            break
+                normalized = " ".join(text.casefold().split())
+                key = normalized + ("|" + timestamp if timestamp else "")
                 if text and key not in seen:
+                    if timestamp and not re.search(r"^\s*Timestamp\s*:", text, re.I | re.M):
+                        text += f"\nTimestamp: {timestamp}"
                     memories.append(text)
                     seen.add(key)
-            return self._deduplicate_recalled(memories)
+            # Keep distinct event records intact here so the structured
+            # customer-history API can aggregate outcomes in its presentation
+            # without losing attempts or their timestamps.
+            return memories
         finally:
             client.close()

@@ -1,22 +1,140 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f4f6fa">
-<title>MemorySupport AI</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><script src="{{ url_for('static', filename='script.js') }}" defer></script>
-</head><body><div class="app">
-<header class="topbar"><a class="brand" href="/"><span class="logo">M</span><span>MemorySupport <b>AI</b></span></a><span class="connected"><i></i> Connected</span></header>
-<main class="page"><section class="intro"><div><p class="eyebrow">SUPPORT WORKSPACE</p><h1>Customer support that remembers what worked.</h1><p class="subtitle">Personalized help, grounded in each customer’s Hindsight history.</p></div><span class="privacy">⌑ &nbsp;Customer-scoped memory</span></section>
-<section class="workspace">
-<aside class="panel customers"><header class="side-heading"><div><p class="eyebrow">WORKSPACE</p><h2>Customers</h2></div><span class="count" id="customer-total">3</span></header>
-<button class="new-customer" id="new-customer-button" type="button">＋ &nbsp;New customer</button>
-<form class="new-form" id="new-customer-form" hidden><label for="new-customer-id">Customer name or ID</label><input id="new-customer-id" maxlength="128" autocomplete="off" placeholder="e.g. arjun"><div><button class="button quiet" id="cancel-new-customer" type="button">Cancel</button><button class="button primary" type="submit">Open customer</button></div></form>
-<nav id="customer-list" class="customer-list" aria-label="Customers"></nav><p class="sidebar-note">✓ &nbsp;History stays scoped to the selected customer.</p></aside>
-<section class="panel chat"><header class="chat-head"><div class="customer-heading"><span class="avatar" id="customer-avatar">R</span><div><div class="heading-line"><h2 id="conversation-heading">Rahul</h2><span id="customer-badge" class="badge">Checking history</span></div><p>Support conversation</p></div></div><button class="button quiet" id="clear-conversation" type="button">Clear chat</button></header>
-<div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions text"></div>
-<div class="error" id="chat-error" role="alert" hidden><span id="chat-error-message"></span><button id="retry-button" type="button" hidden>Retry</button></div>
-<section class="scenarios"><div><b>DEMO SCENARIOS</b><small>Click to fill the message</small></div><div id="scenario-list"></div></section>
-<form class="composer" id="message-form"><label class="sr-only" for="message-input">Message</label><textarea id="message-input" rows="2" maxlength="4000" placeholder="Type a support message…" required></textarea><div><span>Enter to send <i>·</i> Shift + Enter for a new line</span><button class="send" id="send-button" type="submit"><span id="send-label">Send</span> ↗</button></div></form></section>
-<aside class="panel memories"><header class="memory-head"><div><p class="eyebrow">CUSTOMER CONTEXT</p><h2>✦ &nbsp;Hindsight Memory</h2></div><span class="count memory-count" id="memory-count">0</span></header>
-<div class="memory-status" id="memory-status" data-kind="loading"><i></i><div><strong id="memory-status-title">Loading customer history</strong><p id="memory-status-copy">Searching Hindsight for this customer.</p></div></div>
-<button class="memory-retry" id="memory-retry" type="button" hidden>Retry history lookup</button><div class="memory-body" id="memory-body"></div>
-<footer class="memory-foot"><b>✓</b><span id="memory-footnote-copy">Only memories retrieved for this customer are shown.</span></footer></aside>
-</section><footer class="page-foot"><span>MemorySupport AI · Prototype</span><span>Hindsight memory · Groq support agent</span></footer></main></div></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f8fc">
+    <title>SupportAI — Memory-powered customer support</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='script.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="SupportAI home">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span class="brand-name">Support<span>AI</span><small>MEMORY-POWERED CUSTOMER SUPPORT</small></span>
+      </a>
+      <div class="memory-active" id="hindsight-indicator" data-state="loading" role="status">
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <span id="hindsight-label">Connecting to Hindsight…</span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section class="welcome-row" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">SUPPORT WORKSPACE</p>
+          <h1 id="page-title">A little more context. A lot more helpful.</h1>
+          <p class="welcome-copy">Your support agent remembers the details and outcomes that matter to each customer.</p>
+        </div>
+        <div class="privacy-note"><span aria-hidden="true">◈</span> Customer histories stay separate</div>
+      </section>
+
+      <section class="workspace" aria-label="Customer support workspace">
+        <aside class="sidebar card" aria-label="Customer navigation">
+          <div class="sidebar-title">
+            <div><p class="eyebrow">WORKSPACE</p><h2>Customers</h2></div>
+            <span class="customer-count" id="customer-total" aria-label="Customer count">1</span>
+          </div>
+
+          <nav class="customer-list" id="customer-list" aria-label="Customers"></nav>
+
+          <button class="sidebar-action" id="new-customer-button" type="button" aria-expanded="false" aria-controls="new-customer-form">
+            <span class="action-plus" aria-hidden="true">+</span> New customer
+          </button>
+          <form class="new-customer-form" id="new-customer-form" hidden>
+            <label for="new-customer-id">Customer name or ID</label>
+            <input id="new-customer-id" name="customer_id" maxlength="128" autocomplete="off" placeholder="e.g. Customer 204">
+            <div class="form-actions">
+              <button class="button button-quiet" id="cancel-new-customer" type="button">Cancel</button>
+              <button class="button button-primary" type="submit">Create customer</button>
+            </div>
+          </form>
+          <div class="sidebar-bottom">
+            <button class="sidebar-link" id="new-conversation" type="button"><span aria-hidden="true">＋</span> New conversation</button>
+            <p><span aria-hidden="true">✓</span> Each customer has a private Hindsight history.</p>
+          </div>
+        </aside>
+
+        <section class="chat card" aria-label="Support conversation">
+          <header class="chat-header">
+            <div class="customer-heading">
+              <span class="customer-avatar" id="customer-avatar" aria-hidden="true">R</span>
+              <div class="customer-heading-copy">
+                <h2 id="conversation-heading">Rahul</h2>
+                <p>Customer support</p>
+              </div>
+              <span class="conversation-status" id="conversation-status" data-status="in-progress">In Progress</span>
+            </div>
+            <div class="chat-header-actions">
+              <button class="button button-quiet summary-button" id="summary-button" type="button">Summary</button>
+              <button class="button button-quiet new-conversation-header" id="new-conversation-header" type="button">＋ New conversation</button>
+              <button class="button button-quiet memory-toggle" id="memory-toggle" type="button" aria-expanded="false" aria-controls="memory-panel">Memory</button>
+              <details class="chat-menu" id="chat-menu">
+                <summary aria-label="Conversation actions">···</summary>
+                <div class="chat-menu-items">
+                  <button id="clear-conversation" type="button">Clear current conversation</button>
+                  <button id="copy-summary" type="button">Copy summary</button>
+                  <button id="end-conversation" type="button">End conversation</button>
+                </div>
+              </details>
+            </div>
+          </header>
+
+          <section class="current-issue" id="current-issue" aria-label="Current issue">
+            <div class="current-issue-title"><span class="issue-icon" aria-hidden="true">◎</span><div><p class="eyebrow">CURRENT ISSUE</p><strong id="current-issue-name">Waiting for issue details</strong></div></div>
+            <div class="issue-detail"><small>CONTEXT</small><span id="current-issue-context">Not identified yet</span></div>
+            <div class="issue-detail issue-status-detail"><small>STATUS</small><span id="current-issue-status">In Progress</span></div>
+          </section>
+
+          <div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions text"></div>
+          <div class="feedback" id="feedback" hidden>
+            <span id="feedback-question">Was this helpful?</span>
+            <button type="button" data-feedback="yes" aria-label="Yes, this was helpful">👍 Yes</button>
+            <button type="button" data-feedback="no" aria-label="No, this was not helpful">👎 No</button>
+            <span class="feedback-thanks" id="feedback-thanks" hidden>Thanks for letting us know.</span>
+          </div>
+
+          <form class="composer" id="message-form">
+            <label class="sr-only" for="message-input">Message</label>
+            <textarea id="message-input" rows="2" maxlength="4000" placeholder="Write a message…" required></textarea>
+            <div class="composer-footer">
+              <span class="keyboard-hint">Enter to send <span aria-hidden="true">·</span> Shift + Enter for a new line</span>
+              <button class="send-button" id="send-button" type="submit"><span id="send-label">Send</span><span aria-hidden="true">↗</span></button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="memory-panel card" id="memory-panel" aria-labelledby="memory-title">
+          <header class="memory-header">
+            <div class="memory-title-row"><span class="memory-sparkle" aria-hidden="true">✳</span><div><p class="eyebrow">POWERED BY HINDSIGHT</p><h2 id="memory-title">What I Remember</h2></div></div>
+            <button class="memory-close" id="memory-close" type="button" aria-label="Close memory panel">×</button>
+            <span class="memory-count" id="memory-count" aria-label="Memories returned">0</span>
+          </header>
+          <div class="memory-state" id="memory-status" data-kind="loading" role="status">
+            <span class="state-indicator" aria-hidden="true"></span>
+            <div><strong id="memory-status-title">Connecting to Hindsight…</strong><p id="memory-status-copy">Loading this customer’s support history.</p></div>
+          </div>
+          <button class="memory-retry" id="memory-retry" type="button" hidden>Retry history lookup</button>
+          <div class="memory-body" id="memory-body"></div>
+          <footer class="memory-footer"><span aria-hidden="true">⌁</span><span id="memory-footnote-copy">Only this customer’s Hindsight memories are shown.</span></footer>
+        </aside>
+        <button class="drawer-scrim" id="memory-scrim" type="button" aria-label="Close memory panel" hidden></button>
+      </section>
+      <footer class="app-footer"><span>SupportAI <span aria-hidden="true">·</span> Memory-powered customer support</span><span>Personalized with Hindsight and Groq</span></footer>
+    </main>
+
+    <dialog class="summary-dialog" id="summary-dialog" aria-labelledby="summary-title">
+      <div class="summary-header"><div><p class="eyebrow">CONVERSATION SUMMARY</p><h2 id="summary-title">Conversation summary</h2></div><button class="memory-close" id="summary-close" type="button" aria-label="Close summary">×</button></div>
+      <div class="summary-content" id="summary-content"></div>
+      <footer class="dialog-actions"><span class="copy-status" id="summary-copy-status" role="status"></span><button class="button button-quiet" id="summary-copy-button" type="button">Copy summary</button></footer>
+    </dialog>
+
+    <dialog class="summary-dialog handoff-dialog" id="handoff-dialog" aria-labelledby="handoff-title">
+      <div class="summary-header"><div><p class="eyebrow">SUPPORT HANDOFF</p><h2 id="handoff-title">Handoff summary</h2></div><button class="memory-close" id="handoff-close" type="button" aria-label="Close handoff">×</button></div>
+      <p class="handoff-note">This creates a summary you can share with a human support representative. No ticket is created.</p>
+      <pre class="handoff-content" id="handoff-content"></pre>
+      <footer class="dialog-actions"><span class="copy-status" id="handoff-copy-status" role="status"></span><button class="button button-primary" id="handoff-copy-button" type="button">Copy handoff summary</button></footer>
+    </dialog>
+  </body>
+</html>
